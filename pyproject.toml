@@ -25,13 +25,17 @@ classifiers = [
   "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = [
-    "textual>=0.73.0",
+    "textual>=8.2.8",
+    "textual-dev>=1.8.0",
 ]
 
 [project.urls]
-Documentation = "https://github.com/Øyvind I. Berntsen/geotui#readme"
-Issues = "https://github.com/Øyvind I. Berntsen/geotui/issues"
-Source = "https://github.com/Øyvind I. Berntsen/geotui"
+Documentation = "https://github.com/jangerberries/geotui#readme"
+Issues = "https://github.com/jangerberries/geotui/issues"
+Source = "https://github.com/jangerberries/geotui"
+
+[project.scripts]
+geotui = "geotui.app:main"
 
 [tool.hatch.version]
 path = "src/geotui/__about__.py"

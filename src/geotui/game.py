@@ -116,7 +116,7 @@ class borders_game:
     def subscribe(self, listener: Callable):
         self._listeners.append(listener)
 
-    def _notify(self, change):
+    async def _notify(self, change):
         for listener in self._listeners:
             listener(change)
 
@@ -137,7 +137,7 @@ class borders_game:
                 self._notify({"kind": "new-done", "vertex": new_done[0]})
 
             if len(new_done) == 2:
-                self._notify({"kind": "new-done", "vertex": new_done[0]})
+                await self._notify({"kind": "new-done", "vertex": new_done[0]})
                 self._notify({"kind": "new-done", "vertex": new_done[1]})
                 
             new_partial = self.countries.vs(

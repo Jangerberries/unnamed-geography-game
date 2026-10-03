@@ -93,7 +93,6 @@ class CountryInput(Input):
 
         super().__init__()
         self.valid_empty = False
-#        self.suggester = SuggestFromList(selectable_countries, case_sensitive=False)
         self.validators = [
             Function(
                 lambda input: input in self.selectable_countries, "Not a valid country."
@@ -159,7 +158,8 @@ class UnnamedGame(App):
             self.app.log("UnnamedGame: on_unnamed_country_done: didn't find a CountryCard, skipping")
             return
 
-        change_focus = done_country_card.has_focus
+        change_focus = done_country_card.query_one(CountryInput).has_focus
+        self.app.log(f"UnnamedGame: on_unnamed_game_country_done: change_focus is {change_focus}")
         self.app.log("UnnamedGame: on_unnamed_game_country_done: removing a CountryCard")
         await done_country_card.remove()
         self.app.log("UnnamedGame: on_unnamed_game_country_done: removed CountryCard")

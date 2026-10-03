@@ -32,20 +32,17 @@ Vertical > Static {
       content-align: center middle;
 }
 
-CountryGrid {
-	    grid-size: 2;
-	    margin: 0 2;
+Grid.countrygrid {
+	    grid-size: 1;
+	    margin: 0 0;
 	    grid-rows: auto;
 	    height: auto;
 }
 
-VerticalScroll {
-	       height: 6fr;
-}
-
 CountryCard {
-				    margin: 0 1;
-	    padding: 1 1;	    
-	    background: $panel-darken-2
-	    
+	    background: $panel-darken-2;
+	    height: auto;
+	    padding: 1;
+	    margin: 0;
 }
+	

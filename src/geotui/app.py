@@ -4,7 +4,17 @@ from textual.app import App
 from textual.screen import Screen
 from textual.validation import Function
 from textual.suggester import SuggestFromList
-from textual.widgets import Header, Footer, Input, Label, Collapsible
+from textual.css.query import NoMatches
+from textual_autocomplete import AutoComplete
+from textual.widgets import (
+    Header,
+    Footer,
+    Input,
+    Label,
+    Collapsible,
+    TabbedContent,
+    Markdown,
+)
 from textual.containers import (
     Center,
     Middle,
@@ -13,93 +23,97 @@ from textual.containers import (
     Grid,
     VerticalScroll,
 )
+from textual.message import Message
 from typing import ClassVar
-
 from importlib.resources import files
-
 from geotui.game import borders_game
 
+from textual.suggester import Suggester
 
-class CountryCard(Collapsible):
-    def __init__(self, country):
-        self.country = country
-        self.done_borders = [
-            border
-            for border, completed in country["borders"].items()
-            if completed is True
-        ]
-        self.missing_borders = [
-            "..."
-            for border, completed in country["borders"].items()
-            if completed is not True
-        ]
-        labels = [Label(f"✅ {border}") for border in self.done_borders]
-        super().__init__(*labels, collapsed=True, title=self.make_title())
-
-    def make_title(self):
-        return f"{self.country['flag']} {self.country['name']} ({len(self.done_borders)}/{len(self.country['borders'])})"
-
-
-class CountryGrid(Grid):
-    def __init__(self):
+class StatusUpdate(Message):
+    def __init__(self, change):
         super().__init__()
 
+class CountryCard(Vertical):
+    def on_status_update(self):
+        self.log("CountryCard: on_status_update is updating the title")
+        self.country = self.app.game.countries.vs.find(name=self.country["name"])
+        self.guessed_neighbors = self.app.game.countries.guessed_borders(self.country)
+        self.all_neighbors = self.country.neighbors()
+        label = self.query_one(Markdown)
+        label.update(self.make_title())
+
+    def __init__(self, country):
+        super().__init__(id = country["alpha3Code"])
+        self.country = country
+        self.guessed_neighbors = self.app.game.countries.guessed_borders(self.country)
+        self.all_neighbors = self.country.neighbors()
+        self.title = self.make_title()
+
+    def make_title(self):
+        guessed_text = " ".join(
+            [
+                f"{country['flag']} {country['name']}"
+                for country in self.guessed_neighbors
+            ]
+        )
+        lat = self.country["latlng"][0]
+        lng = self.country["latlng"][1]
+        return (
+            f"# {self.country['flag']} {self.country['name']} "
+            f"({len(self.guessed_neighbors)}/{len(self.all_neighbors)}) "
+            f"[🌍](https://www.google.com/maps/@{lat},{lng},5z)\n"
+            f"{guessed_text}"
+        )
+
     def compose(self):
-        self.countries = [
-            CountryCard(country) for country in self.app.game.status()["in_progress"]
-        ]
-        yield from self.countries
+        yield Markdown(self.title)
+        country_input = CountryInput()
+        yield country_input
+        yield AutoComplete(
+            country_input,
+            candidates = country_input.selectable_countries
+        )
+
+    async def on_input_submitted(self, event: CountryInput.Submitted):
+        input = self.query_children(CountryInput).first()
+
+        if input.is_valid:
+            self.app.log(f"CountryCard: on_input_submitted: Input was {input.value}")
+            await self.app.game.guess_border(self.country["name"], input.value)
+            self.app.log(f"CountryCard: in_input_submitted: Clearing the input.")
+            input.clear()
 
 
 class CountryInput(Input):
     def __init__(self):
-        selectable_countries = [country["name"] for country in self.app.game.countries]
+        self.selectable_countries = [
+            country["name"] for country in self.app.game.countries.vs()
+        ]
+
         super().__init__()
         self.valid_empty = False
-        self.suggester = SuggestFromList(selectable_countries, case_sensitive=False)
+#        self.suggester = SuggestFromList(selectable_countries, case_sensitive=False)
         self.validators = [
             Function(
-                lambda input: input in selectable_countries, "Not a valid country."
+                lambda input: input in self.selectable_countries, "Not a valid country."
             )
         ]
         self.validate_on = ["submitted"]
 
 
-class MainScreen(Screen):
-    def __init__(self):
-        super().__init__()
-
-    def on_mount(self):
-        self.sub_title = self.make_status()
-
-    def compose(self):
-        yield Header()
-        with Middle(), Center(), Vertical():
-            with VerticalScroll():
-                yield CountryGrid()
-            yield Horizontal(CountryInput(), CountryInput())
-        yield Footer()
-
-    def make_status(self):
-        status = self.app.game.status()
-        return f"""{status["done_number"]}/{status["total_number"]} done, {status["guesses"]} guesses, {status["mistakes"]} mistakes"""
-
-    def on_input_submitted(self, event: CountryInput.Submitted) -> None:
-        inputs = self.query(CountryInput)
-        first = inputs.first()
-        second = inputs.last()
-
-        if first.is_valid and second.is_valid:
-            self.app.game.guess_border(first.value, second.value)
-            self.sub_title = self.make_status()
-            self.query_one(CountryGrid).refresh(recompose=True)
-
-        return
-
-
-class geotui(App):
+class UnnamedGame(App):
     CSS_PATH = "app.tcss"
-    SCREENS: ClassVar = {"main-menu": MainScreen}
+
+    class CountryDone(Message):
+        def __init__(self, change):
+            super().__init__()
+            self.change = change
+
+    class CountryStarted(Message):
+        def __init__(self, change):
+            super().__init__()
+            self.change = change
 
     def __init__(self):
         super().__init__()
@@ -107,18 +121,87 @@ class geotui(App):
         json_resource = files("geotui").joinpath("countries.json")
         with json_resource.open("r") as file:
             data = json.load(file)
+
+        data = [item for item in data if item["independent"] is True]
         self.game = borders_game(data)
+        self.game.subscribe(self._on_game_changed)
+
+    def _on_game_changed(self, change):
+        self.app.log(f"UnnamedGame: _on_game_changed: got a {change['kind']}")
+        if change["kind"] == "new-done":
+            self.app.log("UnnamedGame: _on_game_changed: dispatching to self.CountryDone")
+            self.post_message(self.CountryDone(change))
+        if change["kind"] == "new-partial":
+            self.app.log("UnnamedGame: _on_game_changed: dispatching to self.CountryStarted")
+            self.post_message(self.CountryStarted(change))
+
+        if change["kind"] in ["success", "failure"]:
+            for card in self.app.query(CountryCard):
+                self.app.log("UnnamedGame: _on_game_changed: dispatching to StatusUpdate")
+                card.post_message(StatusUpdate(change))
+            self.post_message(StatusUpdate(change))
+            
+    def on_status_update(self):
+        self.app.log("UnnamedGame: on_status_update: updating the subtitle")
+        self.sub_title = self.make_subtitle()
+
+    async def on_unnamed_game_country_started(self, message):
+        new_country_card = CountryCard(message.change["vertex"])
+        grid = self.app.query_one("#in_progress", Grid)
+        self.app.log("UnnamedGame: on_unnamed_game_country-started: mounting a new CountryCard")
+        await grid.mount(new_country_card)
+        self.app.log("UnnamedGame: on_unnamed_game_country-started: CountryCard finished mounting")
+
+    async def on_unnamed_game_country_done(self, message):
+        try:
+            done_country_card = self.app.query_one(f"#{message.change['vertex']['alpha3Code']}", CountryCard)
+        except NoMatches:
+            self.app.log("UnnamedGame: on_unnamed_country_done: didn't find a CountryCard, skipping")
+            return
+
+        change_focus = done_country_card.has_focus
+        self.app.log("UnnamedGame: on_unnamed_game_country_done: removing a CountryCard")
+        await done_country_card.remove()
+        self.app.log("UnnamedGame: on_unnamed_game_country_done: removed CountryCard")
+        first_card = self.query_one(CountryCard)
+
+        if change_focus:
+            self.app.log("UnnamedGame: on_unnamed_game_country_done: removed widget was focused")
+            self.app.log("UnnamedGame: on_unnamed_game_country_done: focusing a new input")
+            first_card.query_one(Input).focus()
+        else:
+            self.app.log("UnnamedGame: on_unnamed_game_country_done: not changing focus")
+
+    def make_subtitle(self):
+        return (
+            f"Progress: {self.app.game.done_countries_num}/{self.app.game.total_countries_num} "
+            f"Guesses: {self.app.game.guesses} "
+            f"Mistakes: {self.app.game.mistakes}"
+        )
 
     def on_mount(self) -> None:
         self.title = "Unnamed geography game"
-        self.theme = "atom-one-dark"
-        self.push_screen("main-menu")
+        self.sub_title = self.make_subtitle()
+        self.theme = "solarized-dark"
 
+    def compose(self):
+        yield Header()
+        with Middle(), Center(), Vertical():
+            with TabbedContent("In progress", "Completed"):
+                with VerticalScroll(can_focus = False), Grid(classes="countrygrid", id="in_progress"):
+                    country_cards = [
+                        CountryCard(country)
+                        for country in self.app.game.countries.partially_guessed_countries
+                    ]
+                    yield from country_cards
+                with VerticalScroll():
+                    yield Grid(classes="countrygrid", id="completed")
+
+        yield Footer()
 
 def main():
-    app = geotui()
+    app = UnnamedGame()
     app.run()
-
 
 if __name__ == "__main__":
     main()

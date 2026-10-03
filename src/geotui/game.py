@@ -1,167 +1,156 @@
-class borders_game:
+import random
+import igraph
+
+
+class CountryGraph(igraph.Graph):
     def __init__(self, data):
-        self.countries = [
-            country
-            for country in data
-            if country["independent"] and "borders" in country
-        ]
+        super().__init__(directed=False)
+        self.add_vertices(len(data))
+        for vertex, country in zip(self.vs, data):
+            for key, value in country.items():
+                vertex[key] = value
 
-        self.countries = [
-            {
-                key: country[key]
-                for key in ["name", "flag", "alpha3Code", "borders"]
-                if key in country
-            }
-            for country in self.countries
-        ]
+        edges = []
 
-        for i, country in enumerate(self.countries):
-            borders = self.countries[i]["borders"]
-            # translate alpha3 to name
-            names = [
-                country["name"]
-                for border in borders
-                for country in self.countries
-                if country["alpha3Code"] == border
-            ]
-            country["borders"] = {name: False for name in names}
+        for country in [item for item in data if "borders" in item]:
+            country_vertex = self.vs.find(name=country["name"])
 
-        for country in self.countries:
-            country["done"] = False
-            country["mentioned"] = False
+            for bordering_country in country["borders"]:
+                matches = self.vs.select(alpha3Code=bordering_country)
+
+                if not matches:
+                    continue
+
+                bordering_vertex = matches[0]
+                
+                edges.append({country_vertex.index, bordering_vertex.index})
+
+        edges = {tuple(sorted(edge)) for edge in edges}
+
+        self.add_edges(list(edges))
+
+        for edge in self.es:
+            edge["guessed"] = False
 
         self.guesses = 0
+
+    @property
+    def partially_guessed_countries(self):
+        def some_but_not_all_guessed(v):
+            guessed = [
+                self.es[eid]["guessed"] for eid in self.incident(v.index, mode="ALL")
+            ]
+            return any(guessed) and not all(guessed)
+
+        return self.vs.select(some_but_not_all_guessed)
+
+    @property
+    def completely_guessed_countries(self):
+        return self.vs.select(
+            lambda v: all(
+                self.es[eid]["guessed"] == True
+                for eid in self.incident(v.index, mode="ALL")
+            )
+        )
+
+    def guess_border(self, country_a, country_b):
+        self.guesses += 1
+        vertex_a = self.vs.select(name=country_a)
+        vertex_b = self.vs.select(name=country_b)
+
+        if len(vertex_a) == 1 and len(vertex_b) == 1:
+            are_neighbors = self.are_adjacent(vertex_a[0], vertex_b[0])            
+
+            if are_neighbors:
+                edge = self.es[self.get_eid(vertex_a[0].index, vertex_b[0].index)]
+                edge["guessed"] = True
+                edge["order_guessed"] = self.guesses
+                return True
+
+            else:
+                return False
+
+    def guessed_borders(self, country):
+        edges = self.es.select(_incident=[country.index], guessed=True)
+
+        edges = sorted(
+            edges,
+            key=lambda edge: edge["order_guessed"]
+        )
+
+        neighbors = self.vs[
+            [
+                edge.target if edge.source == country.index else edge.source
+                for edge in edges
+            ]
+        ]
+
+        return neighbors
+
+
+class borders_game:
+    def __init__(self, data):
+        self.countries = CountryGraph(data)
+        self.countries.delete_vertices(
+            [v.index for v in self.countries.vs(_degree_eq=0)]
+        )
         self.mistakes = 0
-        self.countries_total = len(self.countries)
 
-    def status(self):
-        done_countries = [country for country in self.countries if country["done"]]
+        # temporary: initialize one country as in_progress
+        self.countries.guess_border("Norway", "Sweden")
 
-        in_progress_countries = [
-            country
-            for country in self.countries
-            if not country["done"] and any(country["borders"].values())
-        ]
+        self._listeners = []
 
-        mentioned_countries = [
-            country
-            for country in self.countries
-            if country["mentioned"] is True and not any(country["borders"].values())
-        ]
+    @property
+    def guesses(self):
+        return self.countries.guesses
 
-        return {
-            "done": done_countries,
-            "done_number": len(done_countries),
-            "total_number": len(self.countries),
-            "in_progress": in_progress_countries,
-            "mentioned": mentioned_countries,
-            "guesses": self.guesses,
-            "mistakes": self.mistakes,
-            "progress": f"{len(done_countries)}/{self.countries_total}",
-        }
+    @property
+    def total_countries_num(self):
+        return len(self.countries.vs.select(independent=True, _degree_gt=0))
 
-    def guess_single_country(self, guess):
-        country = next(
-            (country for country in self.countries if country["name"] == guess), None
-        )
-        if country is not None:
-            if country["done"]:
-                return {"country": country}
-            if not country["borders"]:
-                country["done"] = True
-                self.guesses = self.guesses + 1
-                return {"country": country}
-            else:
-                self.guesses = self.guesses + 1
-                country["mentioned"] = True
-                return {"country": country}
-        else:
-            self.guesses = self.guesses + 1
-            self.mistakes = self.mistakes + 1
-            return {"country": country}
+    @property
+    def done_countries_num(self):
+        return len(self.countries.completely_guessed_countries)
 
-    def guess_border(self, a, b):
-        country_a = next(
-            (country for country in self.countries if country["name"] == a), None
-        )
-        country_b = next(
-            (country for country in self.countries if country["name"] == b), None
-        )
-        if country_a is None and country_b is None:
-            self.guesses += 1
+    def subscribe(self, listener: Callable):
+        self._listeners.append(listener)
+
+    def _notify(self, change):
+        for listener in self._listeners:
+            listener(change)
+
+    async def guess_border(self, a, b):
+        done_before = self.countries.completely_guessed_countries.indices
+        partial_before = self.countries.partially_guessed_countries.indices
+
+        result = self.countries.guess_border(a, b)
+
+        if result is True:
+            done_after = self.countries.completely_guessed_countries.indices
+            partial_after = self.countries.partially_guessed_countries.indices
+            new_done = self.countries.vs(
+                set(done_after) - set(done_before)
+            )
+
+            if len(new_done) == 1:
+                self._notify({"kind": "new-done", "vertex": new_done[0]})
+
+            if len(new_done) == 2:
+                self._notify({"kind": "new-done", "vertex": new_done[0]})
+                self._notify({"kind": "new-done", "vertex": new_done[1]})
+                
+            new_partial = self.countries.vs(
+                set(partial_after) - set(partial_before)
+            )
+
+            if len(new_partial) == 1:
+                self._notify({"kind": "new-partial", "vertex": new_partial[0]})
+
+            self._notify({"kind": "success"})
+
+        elif result is False:
             self.mistakes += 1
-            return {"status": self.status(), "last_result": None, "last_guess": [a, b]}
-        elif country_a is None:
-            self.guesses += 1
-            self.mistakes += 1
-            if country_b["mentioned"] is not True:
-                country_b["mentioned"] = True
-                return {
-                    "status": self.status(),
-                    "last_result": country_b,
-                    "last_guess": [a, b],
-                }
-            else:
-                return {
-                    "status": self.status(),
-                    "last_result": None,
-                    "last_guess": [a, b],
-                }
-        elif country_b is None:
-            self.guesses += 1
-            self.mistakes += 1
-            if country_a["mentioned"] is not True:
-                country_a["mentioned"] = True
-                return {
-                    "status": self.status(),
-                    "last_result": country_a,
-                    "last_guess": [a, b],
-                }
-            else:
-                return {
-                    "status": self.status(),
-                    "last_result": None,
-                    "last_guess": [a, b],
-                }
-        else:
-            if country_a["mentioned"] is not True:
-                country_a["mentioned"] = True
-            if country_b["mentioned"] is not True:
-                country_b["mentioned"] = True
-            # don't add a guess if the border has already been guessed
-            if a in [
-                border
-                for border, completed in country_b["borders"].items()
-                if completed is True
-            ]:
-                return {
-                    "status": self.status(),
-                    "last_result": [country_a, country_b],
-                    "last_guess": [a, b],
-                }
-            # if the guess is currently unmentioned, add a guess and mark the border as completed
-            elif a in [
-                border
-                for border, completed in country_b["borders"].items()
-                if completed is not True
-            ]:
-                self.guesses += 1
-                country_a["borders"][b] = True
-                country_b["borders"][a] = True
-                if all(country_a["borders"].values()):
-                    country_a["done"] = True
-                if all(country_b["borders"].values()):
-                    country_b["done"] = True
-                return {
-                    "status": self.status(),
-                    "last_result": [country_a, country_b],
-                    "last_guess": [a, b],
-                }
-            else:
-                self.guesses += 1
-                self.mistakes += 1
-                return {
-                    "status": self.status(),
-                    "last_result": None,
-                    "last_guess": [a, b],
-                }
+            self._notify({"kind": "failure"})
+
+        return result

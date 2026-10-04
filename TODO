@@ -3,27 +3,28 @@
 
   Requirements:
 
-	* Keep track of the number of hints used for each country,
-          Countrycard and the entire game for scoreboard purposes.
+	* Keep track of the number of hints used for each
+          country->country, Countrycard and the entire game for
+          scoreboard purposes.
 	* Hint one country in a CountryCard at a time.
 	* Use a progressive system:
-	  "Saudi Arabia": "..." -> "-----  ------" -> "S---- ------" -> "S---- ------a"
+	  "Saudi Arabia": "..."  -> "----- ------" -> "S---- ------" -> "S---- ------a"
 	* When a country is fully hinted, further hinting should
           deobfuscate the next country.
 	* Solved countries can't be hinted.
 	* Don't increment the hint tally if no more countries can be
-	  hinted any further
+          hinted any further
 	* Hints should be requestable through hotkey, e.g. Ctrl+H.
   
   Implementation:
 
-	Implement a BorderingCountry-class. The class is going to be
-	able to represent both unguessed countries and solved
-	countries through a print method.
+	Implement a Country-class. The class is going to be able to
+	represent both unguessed countries and solved countries
+	through a print method.
 
-	The class should take an igraph node as an initial argument,
-	and make use of the "flag" and "name" attributes when
-	constructing a country string.
+	The class should take country data as an initial argument, and
+	make use of the "flag" and "name" attributes when constructing
+	a country string.
 
 	The class should have settable "hint" and "solved" parameters.
 

@@ -31,6 +31,7 @@ class CountryGraph(igraph.Graph):
 
         for edge in self.es:
             edge["guessed"] = False
+            edge["hints"] = 0
 
         self.guesses = 0
 
@@ -134,23 +135,23 @@ class borders_game:
             )
 
             if len(new_done) == 1:
-                self._notify({"kind": "new-done", "vertex": new_done[0]})
+                await self._notify({"kind": "new-done", "vertex": new_done[0]})
 
             if len(new_done) == 2:
                 await self._notify({"kind": "new-done", "vertex": new_done[0]})
-                self._notify({"kind": "new-done", "vertex": new_done[1]})
+                await self._notify({"kind": "new-done", "vertex": new_done[1]})
                 
             new_partial = self.countries.vs(
                 set(partial_after) - set(partial_before)
             )
 
             if len(new_partial) == 1:
-                self._notify({"kind": "new-partial", "vertex": new_partial[0]})
+                await self._notify({"kind": "new-partial", "vertex": new_partial[0]})
 
-            self._notify({"kind": "success"})
+            await self._notify({"kind": "success"})
 
         elif result is False:
             self.mistakes += 1
-            self._notify({"kind": "failure"})
+            await self._notify({"kind": "failure"})
 
         return result

@@ -1,7 +1,8 @@
 import json
 
 from datetime import datetime
-import time        
+import time
+import random
 
 from textual.app import App
 from textual.screen import Screen
@@ -286,11 +287,9 @@ class UnnamedGame(App):
         with Middle(), Center(), Vertical():
             with TabbedContent("In progress", "Completed"):
                 with VerticalScroll(can_focus = False), Grid(classes="countrygrid", id="in_progress"):
-                    country_cards = [
-                        CountryCard(country)
-                        for country in self.app.game.countries.partially_guessed_countries
-                    ]
-                    yield from country_cards
+                    yield CountryCard(
+                        self.app.game.countries.vs().find(seed = True)
+                    )
                 with VerticalScroll():
                     yield Grid(classes="countrygrid", id="completed")
 

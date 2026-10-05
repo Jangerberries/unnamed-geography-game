@@ -33,17 +33,28 @@ class CountryGraph(igraph.Graph):
             edge["guessed"] = False
             edge["hints"] = 0
 
+        for vertex in self.vs:
+            vertex["seed"] = False
+
+        self.seed_country = self.vs[random.randrange(self.vcount())]
+        self.seed_country["seed"] = True
+            
         self.guesses = 0
 
     @property
     def partially_guessed_countries(self):
-        def some_but_not_all_guessed(v):
+        def matches(v):
             guessed = [
-                self.es[eid]["guessed"] for eid in self.incident(v.index, mode="ALL")
+                self.es[eid]["guessed"]
+                for eid in self.incident(v.index, mode="ALL")
             ]
-            return any(guessed) and not all(guessed)
 
-        return self.vs.select(some_but_not_all_guessed)
+            some_guessed = any(guessed)
+            all_guessed = all(guessed)
+            
+            return not all_guessed and (some_guessed or v["seed"])
+
+        return self.vs.select(matches)
 
     @property
     def completely_guessed_countries(self):
@@ -97,9 +108,6 @@ class borders_game:
         )
         self.mistakes = 0
 
-        # temporary: initialize one country as in_progress
-        self.countries.guess_border("Norway", "Sweden")
-
         self._listeners = []
 
     @property
@@ -147,6 +155,10 @@ class borders_game:
 
             if len(new_partial) == 1:
                 await self._notify({"kind": "new-partial", "vertex": new_partial[0]})
+
+            if len(new_partial) == 2:
+                await self._notify({"kind": "new-partial", "vertex": new_partial[0]})
+                await self._notify({"kind": "new-partial", "vertex": new_partial[1]})
 
             await self._notify({"kind": "success"})
 

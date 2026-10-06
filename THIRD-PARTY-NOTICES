@@ -1,4 +1,4 @@
-This application uses countrydata from GeoNames (CC BY 4.0) and the
+This application uses country data from GeoNames (CC BY 4.0) and the
 Python libraries igraph (GPL), textual (MIT), textual-autocomplete
 (MIT) and textual-dev (MIT).
 

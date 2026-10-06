@@ -1,0 +1,66 @@
+/* Unnamed geography game                                                            */
+/* Copyright 2026 Øyvind I. Berntsen                                                 */
+
+/* This file is part of unnamed-geography-game.                                      */
+
+/* unnamed-geography-game is free software: you can redistribute it and/or modify it */
+/* under the terms of the GNU General Public License as published by                 */
+/* the Free Software Foundation, either version 3 of the License, or                 */
+/* (at your option) any later version.                                               */
+
+/* unnamed-geography-game is distributed in the hope that it will be useful, but     */
+/* WITHOUT ANY WARRANTY; without even the implied warranty of                        */
+/* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU                  */
+/* General Public License for more details.                                          */
+
+/* You should have received a copy of the GNU General Public License                 */
+/* along with unnamed-geography-game. If not, see                                    */
+/* <https://www.gnu.org/licenses/>.                                                  */
+
+MainScreen > Middle {
+       height: 100%;
+       border: solid red;
+       margin: 0 0;
+       padding: 0 0;
+       border: tall $background
+
+}
+
+Center {
+}
+
+Vertical {
+	 content-align: center middle;
+}
+
+Horizontal {
+	   content-align: center middle;
+}
+
+Vertical > Horizontal > Input {
+      height: auto;
+      width: 1fr;
+      content-align: center middle;
+      margin: 0 1;
+}
+
+Vertical > Static {
+      height: 5;
+      width: 100%;
+      content-align: center middle;
+}
+
+Grid.countrygrid {
+	    grid-size: 1;
+	    margin: 0 0;
+	    grid-rows: auto;
+	    height: auto;
+}
+
+CountryCard {
+	    background: $panel-darken-2;
+	    height: auto;
+	    padding: 1;
+	    margin: 0;
+}
+	

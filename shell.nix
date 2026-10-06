@@ -8,7 +8,7 @@ pkgs.mkShell {
   ];
   shellHook = ''
     alias ch='ruff check; ruff format; ty check'
-    alias gt='uv tool install .; textual run --dev ~/probe/unnamed-geography-game/src/geotui/app.py'
+    alias gt='uv tool install .; textual run --dev ~/probe/unnamed-geography-game/src/unnamed_geography_game/app.py'
     alias tc='textual console -x SYSTEM -x EVENT -x WORKER'
     alias rp='python -i foo.py'
     PATH=~/.local/bin/:$PATH

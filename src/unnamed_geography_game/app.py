@@ -1,3 +1,23 @@
+# Unnamed geography game
+# Copyright 2026 Øyvind I. Berntsen
+#
+# This file is part of unnamed-geography-game.
+# 
+# unnamed-geography-game is free software: you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# 
+# unnamed-geography-game is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with unnamed-geography-game. If not, see
+# <https://www.gnu.org/licenses/>.
+
+
 import json
 
 from datetime import datetime
@@ -31,7 +51,7 @@ from textual.containers import (
 from textual.message import Message
 from typing import ClassVar
 from importlib.resources import files
-from geotui.game import borders_game
+from unnamed_geography_game.game import borders_game
 
 from textual.suggester import Suggester
 
@@ -173,9 +193,6 @@ class CountryInput(Input):
         ]
         self.validate_on = ["submitted"]
 
-
-        
-
 class UnnamedGame(App):
     CSS_PATH = "app.tcss"
 
@@ -218,12 +235,27 @@ class UnnamedGame(App):
     def __init__(self):
         super().__init__()
 
-        json_resource = files("geotui").joinpath("countries.json")
+        json_resource = files("unnamed_geography_game").joinpath("countries.json")
         with json_resource.open("r") as file:
             data = json.load(file)
 
-        data = [item for item in data if item["independent"] is True]
-        self.game = borders_game(data)
+        included_names = {"Uzbekistan", "Hong Kong", "Macao"}
+        excluded_names = {
+            "United Kingdom of Great Britain and Northern Ireland",
+            "Ireland",
+            "Haiti",
+            "Dominican Republic",
+            "Sri Lanka"
+        }
+
+        revised_data = [
+            {**country, "include_in_game": True}
+            for country in data
+            if country["name"] not in excluded_names
+            and (country["name"] in included_names or country["independent"] is True)
+        ]
+        
+        self.game = borders_game(revised_data)
         self.game.subscribe(self._on_game_changed)
 
     def _on_game_changed(self, change):

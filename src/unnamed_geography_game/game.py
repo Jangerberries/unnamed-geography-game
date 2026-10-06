@@ -1,6 +1,24 @@
+# Unnamed geography game
+# Copyright 2026 Øyvind I. Berntsen
+#
+# This file is part of unnamed-geography-game.
+# 
+# unnamed-geography-game is free software: you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# 
+# unnamed-geography-game is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with unnamed-geography-game. If not, see
+# <https://www.gnu.org/licenses/>.
+
 import random
 import igraph
-
 
 class CountryGraph(igraph.Graph):
     def __init__(self, data):
@@ -37,6 +55,7 @@ class CountryGraph(igraph.Graph):
             vertex["seed"] = False
 
         self.seed_country = self.vs[random.randrange(self.vcount())]
+        #self.seed_country = self.vs(name = "Vatican City")
         self.seed_country["seed"] = True
             
         self.guesses = 0
@@ -141,14 +160,6 @@ class borders_game:
             new_done = self.countries.vs(
                 set(done_after) - set(done_before)
             )
-
-            if len(new_done) == 1:
-                await self._notify({"kind": "new-done", "vertex": new_done[0]})
-
-            if len(new_done) == 2:
-                await self._notify({"kind": "new-done", "vertex": new_done[0]})
-                await self._notify({"kind": "new-done", "vertex": new_done[1]})
-                
             new_partial = self.countries.vs(
                 set(partial_after) - set(partial_before)
             )
@@ -159,6 +170,14 @@ class borders_game:
             if len(new_partial) == 2:
                 await self._notify({"kind": "new-partial", "vertex": new_partial[0]})
                 await self._notify({"kind": "new-partial", "vertex": new_partial[1]})
+
+            if len(new_done) == 1:
+                await self._notify({"kind": "new-done", "vertex": new_done[0]})
+
+            if len(new_done) == 2:
+                await self._notify({"kind": "new-done", "vertex": new_done[0]})
+                await self._notify({"kind": "new-done", "vertex": new_done[1]})
+                
 
             await self._notify({"kind": "success"})
 

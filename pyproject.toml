@@ -3,27 +3,16 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "geotui"
+name = "unnamed-geography-game"
 dynamic = ["version"]
 description = 'Simple geography quiz for the terminal'
 readme = "README.md"
 requires-python = ">=3.14"
-license = "MIT"
 keywords = []
 authors = [
   { name = "Øyvind I. Berntsen", email = "oi.berntsen@gmail.com" },
 ]
-classifiers = [
-  "Development Status :: 4 - Beta",
-  "Programming Language :: Python",
-  "Programming Language :: Python :: 3.8",
-  "Programming Language :: Python :: 3.9",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python :: Implementation :: CPython",
-  "Programming Language :: Python :: Implementation :: PyPy",
-]
+
 dependencies = [
     "igraph>=1.0.0",
     "textual>=8.2.8",
@@ -31,35 +20,30 @@ dependencies = [
     "textual-dev>=1.8.0",
 ]
 
-[project.urls]
-Documentation = "https://github.com/jangerberries/geotui#readme"
-Issues = "https://github.com/jangerberries/geotui/issues"
-Source = "https://github.com/jangerberries/geotui"
-
 [project.scripts]
-geotui = "geotui.app:main"
+unnamed-geography-game = "unnamed_geography_game.app:main"
 
 [tool.hatch.version]
-path = "src/geotui/__about__.py"
+path = "src/unnamed_geography_game/__about__.py"
 
 [tool.hatch.envs.types]
 extra-dependencies = [
   "mypy>=1.0.0",
 ]
 [tool.hatch.envs.types.scripts]
-check = "mypy --install-types --non-interactive {args:src/geotui tests}"
+check = "mypy --install-types --non-interactive {args:src/unnamed_geography_game tests}"
 
 [tool.coverage.run]
-source_pkgs = ["geotui", "tests"]
+source_pkgs = ["unnamed-geography-game", "tests"]
 branch = true
 parallel = true
 omit = [
-  "src/geotui/__about__.py",
+  "src/unnamed_geography_game/__about__.py",
 ]
 
 [tool.coverage.paths]
-geotui = ["src/geotui", "*/geotui/src/geotui"]
-tests = ["tests", "*/geotui/tests"]
+unnamed-geography-game = ["src/unnamed_geography_game", "*/unnamed-geography-game/src/unnamed_geography_game"]
+tests = ["tests", "*/unnamed-geography-game/tests"]
 
 [tool.coverage.report]
 exclude_lines = [

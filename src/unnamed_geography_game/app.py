@@ -1,7 +1,32 @@
+# Unnamed geography game
+# Copyright 2026 Øyvind I. Berntsen
+#
+# This file is part of unnamed-geography-game.
+# 
+# unnamed-geography-game is free software: you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# 
+# unnamed-geography-game is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with unnamed-geography-game. If not, see
+# <https://www.gnu.org/licenses/>.
+
+
 import json
+
+from datetime import datetime
+import time
+import random
 
 from textual.app import App
 from textual.screen import Screen
+from textual.binding import Binding
 from textual.validation import Function
 from textual.suggester import SuggestFromList
 from textual.css.query import NoMatches
@@ -26,7 +51,7 @@ from textual.containers import (
 from textual.message import Message
 from typing import ClassVar
 from importlib.resources import files
-from geotui.game import borders_game
+from unnamed_geography_game.game import borders_game
 
 from textual.suggester import Suggester
 
@@ -34,7 +59,13 @@ class StatusUpdate(Message):
     def __init__(self, change):
         super().__init__()
 
+
 class CountryCard(Vertical):
+
+    BINDINGS = [
+        Binding("ctrl+h", "get_hint", "Get a hint", priority = True)
+    ]
+    
     def on_status_update(self):
         self.log("CountryCard: on_status_update is updating the title")
         self.country = self.app.game.countries.vs.find(name=self.country["name"])
@@ -50,7 +81,69 @@ class CountryCard(Vertical):
         self.all_neighbors = self.country.neighbors()
         self.title = self.make_title()
 
+    def action_get_hint(self):
+        for neighbor in self.all_neighbors:
+            border = self.app.game.countries.es.find(
+                self.app.game.countries.get_eid(
+                    self.country["name"], neighbor["name"]
+                )
+            )
+            if border["guessed"]:
+                continue
+            self.app.log(f"action_get_hint: checking {neighbor['name']}:")
+            self.app.log(f"action_get_hint: hints: {border['hints']}")
+            if border["hints"] >= 3:
+                continue
+            else:
+                border["hints"] += 1
+                label = self.query_one(Markdown)
+                label.update(self.make_title())
+                return
+        self.notify("Cannot hint any further!")
+
+    def label_neighbor(self, neighbor):
+        """
+        Print a neighbor name, either in plain text or obfuscated according to the hint level
+        """
+        
+        border = self.app.game.countries.es.find(
+            self.app.game.countries.get_eid(
+                self.country["name"], neighbor["name"]
+            )
+        )
+        self.app.log(f"label_neighbor: making label for {neighbor['name']}")
+        self.app.log(f"label_neighbor: guessed is {border['guessed']}")
+        self.app.log(f"label_neighbor: hints is {border['hints']}")
+        
+        if border["guessed"]:
+            return f"{neighbor['flag']} {neighbor['name']}"
+        elif border["hints"] == 0:
+            return f"🇺🇳 ..."
+        elif border["hints"] == 1:
+            hinted = f"🇺🇳 " + ''.join(' ' if char == ' ' else '-' for char in neighbor["name"])
+            self.app.log(f"Hinted is {hinted}")
+            return hinted
+        elif border["hints"] == 2:
+
+            hinted = f"🇺🇳 " + neighbor["name"][0] + ''.join(' ' if char == ' ' else '-' for char in neighbor["name"][1:])
+            self.app.log(f"Hinted is {hinted}")            
+            return hinted
+        elif border["hints"] == 3:
+            hinted =  (
+                f"🇺🇳 " +
+                neighbor["name"][:1] +
+                ''.join(' ' if char == ' ' else '-' for char in neighbor["name"][1:-1]) +
+                 neighbor["name"][-1:]
+            )
+            self.app.log(f"Hinted is {hinted}")
+            return hinted
+        
+        
+        
     def make_title(self):
+        neighbor_labels = " ".join([
+            self.label_neighbor(neighbor) for neighbor in self.all_neighbors
+        ])
         guessed_text = " ".join(
             [
                 f"{country['flag']} {country['name']}"
@@ -63,7 +156,7 @@ class CountryCard(Vertical):
             f"# {self.country['flag']} {self.country['name']} "
             f"({len(self.guessed_neighbors)}/{len(self.all_neighbors)}) "
             f"[🌍](https://www.google.com/maps/@{lat},{lng},5z)\n"
-            f"{guessed_text}"
+            f"{neighbor_labels}"
         )
 
     def compose(self):
@@ -100,9 +193,34 @@ class CountryInput(Input):
         ]
         self.validate_on = ["submitted"]
 
-
 class UnnamedGame(App):
     CSS_PATH = "app.tcss"
+
+    class StatusHeader(Header):
+
+        def __init__(self):
+            super().__init__()
+            self.started_at = time.monotonic()            
+            self.update_sub_title()
+        
+        def compose(self):
+            self.started_at = time.monotonic()
+            yield from super().compose()
+
+        def on_mount(self) -> None:
+            self.set_interval(1, self.update_sub_title)
+
+        def update_sub_title(self) -> None:
+            elapsed = int(time.monotonic() - self.started_at)
+            hours, remainder = divmod(elapsed, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            self.app.sub_title  = (
+                f"Progress: {self.app.game.done_countries_num}/{self.app.game.total_countries_num} "
+                f"Guesses: {self.app.game.guesses} "
+                f"Mistakes: {self.app.game.mistakes} "
+                f"Hints: {sum(self.app.game.countries.es['hints'])} "
+                f"Elapsed: {minutes:02}:{seconds:02}"
+        )
 
     class CountryDone(Message):
         def __init__(self, change):
@@ -117,12 +235,27 @@ class UnnamedGame(App):
     def __init__(self):
         super().__init__()
 
-        json_resource = files("geotui").joinpath("countries.json")
+        json_resource = files("unnamed_geography_game").joinpath("countries.json")
         with json_resource.open("r") as file:
             data = json.load(file)
 
-        data = [item for item in data if item["independent"] is True]
-        self.game = borders_game(data)
+        included_names = {"Uzbekistan", "Hong Kong", "Macao"}
+        excluded_names = {
+            "United Kingdom of Great Britain and Northern Ireland",
+            "Ireland",
+            "Haiti",
+            "Dominican Republic",
+            "Sri Lanka"
+        }
+
+        revised_data = [
+            {**country, "include_in_game": True}
+            for country in data
+            if country["name"] not in excluded_names
+            and (country["name"] in included_names or country["independent"] is True)
+        ]
+        
+        self.game = borders_game(revised_data)
         self.game.subscribe(self._on_game_changed)
 
     def _on_game_changed(self, change):
@@ -140,10 +273,6 @@ class UnnamedGame(App):
                 card.post_message(StatusUpdate(change))
             self.post_message(StatusUpdate(change))
             
-    def on_status_update(self):
-        self.app.log("UnnamedGame: on_status_update: updating the subtitle")
-        self.sub_title = self.make_subtitle()
-
     async def on_unnamed_game_country_started(self, message):
         new_country_card = CountryCard(message.change["vertex"])
         grid = self.app.query_one("#in_progress", Grid)
@@ -170,30 +299,29 @@ class UnnamedGame(App):
             self.app.log("UnnamedGame: on_unnamed_game_country_done: focusing a new input")
             first_card.query_one(Input).focus()
         else:
+
             self.app.log("UnnamedGame: on_unnamed_game_country_done: not changing focus")
 
     def make_subtitle(self):
         return (
             f"Progress: {self.app.game.done_countries_num}/{self.app.game.total_countries_num} "
             f"Guesses: {self.app.game.guesses} "
-            f"Mistakes: {self.app.game.mistakes}"
+            f"Mistakes: {self.app.game.mistakes} "
+            f"Hints: {sum(self.app.game.countries.es['hints'])}"
         )
 
     def on_mount(self) -> None:
         self.title = "Unnamed geography game"
-        self.sub_title = self.make_subtitle()
         self.theme = "solarized-dark"
 
     def compose(self):
-        yield Header()
+        yield self.StatusHeader()
         with Middle(), Center(), Vertical():
             with TabbedContent("In progress", "Completed"):
                 with VerticalScroll(can_focus = False), Grid(classes="countrygrid", id="in_progress"):
-                    country_cards = [
-                        CountryCard(country)
-                        for country in self.app.game.countries.partially_guessed_countries
-                    ]
-                    yield from country_cards
+                    yield CountryCard(
+                        self.app.game.countries.vs().find(seed = True)
+                    )
                 with VerticalScroll():
                     yield Grid(classes="countrygrid", id="completed")
 

@@ -1,6 +1,24 @@
+# Unnamed geography game
+# Copyright 2026 Øyvind I. Berntsen
+#
+# This file is part of unnamed-geography-game.
+# 
+# unnamed-geography-game is free software: you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# 
+# unnamed-geography-game is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with unnamed-geography-game. If not, see
+# <https://www.gnu.org/licenses/>.
+
 import random
 import igraph
-
 
 class CountryGraph(igraph.Graph):
     def __init__(self, data):
@@ -31,18 +49,31 @@ class CountryGraph(igraph.Graph):
 
         for edge in self.es:
             edge["guessed"] = False
+            edge["hints"] = 0
 
+        for vertex in self.vs:
+            vertex["seed"] = False
+
+        self.seed_country = self.vs[random.randrange(self.vcount())]
+        #self.seed_country = self.vs(name = "Vatican City")
+        self.seed_country["seed"] = True
+            
         self.guesses = 0
 
     @property
     def partially_guessed_countries(self):
-        def some_but_not_all_guessed(v):
+        def matches(v):
             guessed = [
-                self.es[eid]["guessed"] for eid in self.incident(v.index, mode="ALL")
+                self.es[eid]["guessed"]
+                for eid in self.incident(v.index, mode="ALL")
             ]
-            return any(guessed) and not all(guessed)
 
-        return self.vs.select(some_but_not_all_guessed)
+            some_guessed = any(guessed)
+            all_guessed = all(guessed)
+            
+            return not all_guessed and (some_guessed or v["seed"])
+
+        return self.vs.select(matches)
 
     @property
     def completely_guessed_countries(self):
@@ -96,9 +127,6 @@ class borders_game:
         )
         self.mistakes = 0
 
-        # temporary: initialize one country as in_progress
-        self.countries.guess_border("Norway", "Sweden")
-
         self._listeners = []
 
     @property
@@ -132,25 +160,29 @@ class borders_game:
             new_done = self.countries.vs(
                 set(done_after) - set(done_before)
             )
-
-            if len(new_done) == 1:
-                self._notify({"kind": "new-done", "vertex": new_done[0]})
-
-            if len(new_done) == 2:
-                await self._notify({"kind": "new-done", "vertex": new_done[0]})
-                self._notify({"kind": "new-done", "vertex": new_done[1]})
-                
             new_partial = self.countries.vs(
                 set(partial_after) - set(partial_before)
             )
 
             if len(new_partial) == 1:
-                self._notify({"kind": "new-partial", "vertex": new_partial[0]})
+                await self._notify({"kind": "new-partial", "vertex": new_partial[0]})
 
-            self._notify({"kind": "success"})
+            if len(new_partial) == 2:
+                await self._notify({"kind": "new-partial", "vertex": new_partial[0]})
+                await self._notify({"kind": "new-partial", "vertex": new_partial[1]})
+
+            if len(new_done) == 1:
+                await self._notify({"kind": "new-done", "vertex": new_done[0]})
+
+            if len(new_done) == 2:
+                await self._notify({"kind": "new-done", "vertex": new_done[0]})
+                await self._notify({"kind": "new-done", "vertex": new_done[1]})
+                
+
+            await self._notify({"kind": "success"})
 
         elif result is False:
             self.mistakes += 1
-            self._notify({"kind": "failure"})
+            await self._notify({"kind": "failure"})
 
         return result

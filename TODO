@@ -1,119 +1,14 @@
 
-- Implement a hint system.
-
-  Requirements:
-
-	* Keep track of the number of hints used for each country,
-          Countrycard and the entire game for scoreboard purposes.
-	* Hint one country in a CountryCard at a time.
-	* Use a progressive system:
-	  "Saudi Arabia": "..." -> "-----  ------" -> "S---- ------" -> "S---- ------a"
-	* When a country is fully hinted, further hinting should
-          deobfuscate the next country.
-	* Solved countries can't be hinted.
-	* Don't increment the hint tally if no more countries can be
-	  hinted any further
-	* Hints should be requestable through hotkey, e.g. Ctrl+H.
-  
-  Implementation:
-
-	Implement a BorderingCountry-class. The class is going to be
-	able to represent both unguessed countries and solved
-	countries through a print method.
-
-	The class should take an igraph node as an initial argument,
-	and make use of the "flag" and "name" attributes when
-	constructing a country string.
-
-	The class should have settable "hint" and "solved" parameters.
-
-	When the "solved" parameter is True, the method should print
-	the entire name unobfuscated.
-
-	When the "solved" parametere is False, the method should print
-	an obfuscated country name according to the requirements section.
-
-	When requesting further hinting, the class should report
-	whether the hinting was successfully incremented. This allows
-	using a for loop to loop through available class instances,
-	attempting to increment hints for each one. Only increment the
-	game hint tally if a class instance reported success, then end
-	the loop.
-
- 	Can build a single markdown for the country list by building a
-  	list over class instances, potentially sorted by some rule,
-  	then calling a print method on all of them in a list
-  	comprehension, then concatenating the results.
-
-  Considerations:
-
-  	Is it better to store these methods in the graph itself? Some
-  	kind of broader CountryClass in place of the current graph
-  	nodes?  Had thought it best to keep graph-related concerns
-  	(neighbors, edges) to the graph and game-related concerns
-  	(guesses, hints) to the App subclass, but there is already
-  	some bleed (number of guesses is stored in the graph, the App
-  	is clumsily making sure all CountryCards are kept up to
-  	date). Storing more information/methods in the graph would
-  	make things more unified maybe.
-
-	If we store guesses in the graph node, the hint level for a
-	bordering country in one CountryCard would affect the same
-	country in other CountryCards. Unless we somehow store guess
-	state per source-country, which might require two edges per
-	border (inbound and outbound). Inbound/outbound might be
-	desirable regardless if we e.g. want to make a flashcard-style
-	game. Adding an additional edge set would require reworking
-	some graph logic, and we'd have to provide some parameter so
-	we could choose whether the guess_borders should be two-way or
-	one-way.
-
-	Guess order, which could be a desirable field to sort on, is
-	currently stored in the graph itself. If we don't store these
-	methods in the graph we'd have to sort the BorderingCountry
-	class instances according to the guess order pulled from the
-	graph.
-
-	Guess order is global guess order, which works fine when
-	sorting done countries locally in a CountryCard. If we
-	implement inbound/outbound edges we can store guess order in
-	the edge itself, allowing us to store local guess order.
-
-	Moving towards storing more things in the graph could
-	potentially allow the graph itself to notify subscribers about
-	changes, allowing more scoped messaging than we currently
-	have. Would be neat if each CountryCard could manage their own
-	subscription to their CountryNode.
-
-	To keep things flexible, we should probably subclass the
-	igraph node somehow, extending it with our game-related
-	methods. That should enable us to keep our graph-logic mostly
-	intact while allowing the game to run more game-centric
-	methods on the nodes.
-
-	Instead of hinting each country to completion to the next one,
-	we could hint all countries to the next hint level before
-	starting over. This would probably be frustrating for a user
-	that is only stuck on one particular country.
-
-	The hint levels are heterogeneous (esp. if we include the
-	flag), meaning that a total hint tally in itself doesn't say
-	much. Might be therefore be interesting to break hints down by
-	hint level as well. Hints by level could be tallied up by
-	inspecting all HintClasses, but that would require somehow
-	keeping them around in some form until scoreboard-time.
-  
+- Implement a "completed" tab, showing completed countries broken down
+  by some variable (region?)
+- Implement a "guesses" tab, showing previous guesses and potentially
+  their results (and maybe other metadata: correct/incorrect, hints
+  used, time delta since last correct guess, whether the correct guess
+  solved a country completely?)
 - In the country-list in each CountryCard, use non-breaking spaces
   within each country name (and the space) between the flag and the
   country name.
-
-- Implement a random start
-
-- Review "independent" variable; Uzbekistan is set to False.
-
-- Exclude Dominican Republic and Haiti, unless some better solution
-  can be found.
-
 - Improve message posting. Currently, all CountryCards are notified
   whenever there's some sort of change to the graph, which leads to a
   lot of unneccessary recomposes.
+

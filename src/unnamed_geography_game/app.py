@@ -25,7 +25,7 @@ import time
 import random
 
 from textual.app import App
-from textual.screen import Screen
+from textual.screen import Screen, ModalScreen
 from textual.binding import Binding
 from textual.validation import Function
 from textual.suggester import SuggestFromList
@@ -39,7 +39,9 @@ from textual.widgets import (
     Collapsible,
     TabbedContent,
     Markdown,
+    Button
 )
+from textual.widget import Widget
 from textual.containers import (
     Center,
     Middle,
@@ -55,43 +57,79 @@ from unnamed_geography_game.game import borders_game
 
 from textual.suggester import Suggester
 
+from pathlib import Path
+import inspect
+
+from collections import defaultdict
+
 class StatusUpdate(Message):
     def __init__(self, change):
         super().__init__()
 
 
+def log_from_caller(*items):
+    frame = inspect.currentframe()
+    try:
+        frame = frame.f_back
+        instance = frame.f_locals.get("self") if frame else None
+        location = f"{Path(frame.f_code.co_filename).name}:{frame.f_lineno}"
+
+        if instance is None:
+            label = "?"
+        else:
+            methods = []
+            current = frame
+
+            while current:
+                if current.f_locals.get("self") is instance:
+                    name = current.f_code.co_name
+                    if not name.startswith(("<", "_")):
+                        methods.append(name)
+                current = current.f_back
+
+            methods.reverse()
+            label = " > ".join([type(instance).__name__, *methods])
+            instance.log(f"{location}: [{label}]\n\t", *items)
+
+    finally:
+        del frame
+        
+
 class CountryCard(Vertical):
 
     BINDINGS = [
-        Binding("ctrl+h", "get_hint", "Get a hint", priority = True)
+        Binding("ctrl+h", "get_hint", "Get a hint", priority = True),
     ]
-    
+
     def on_status_update(self):
-        self.log("CountryCard: on_status_update is updating the title")
-        self.country = self.app.game.countries.vs.find(name=self.country["name"])
-        self.guessed_neighbors = self.app.game.countries.guessed_borders(self.country)
+        log_from_caller(f"Updating {self.country['name']}")
+        self.country = self.screen.game.countries.vs.find(name=self.country["name"])
+        self.guessed_neighbors = self.screen.game.countries.guessed_borders(self.country)
         self.all_neighbors = self.country.neighbors()
         label = self.query_one(Markdown)
         label.update(self.make_title())
 
+    def on_mount(self):
+        log_from_caller(f"Mounted {self.country['name']}")
+
+    def on_unmount(self):
+        log_from_caller(f"Removing {self.country['name']}")
+
     def __init__(self, country):
         super().__init__(id = country["alpha3Code"])
         self.country = country
-        self.guessed_neighbors = self.app.game.countries.guessed_borders(self.country)
+
         self.all_neighbors = self.country.neighbors()
-        self.title = self.make_title()
 
     def action_get_hint(self):
         for neighbor in self.all_neighbors:
-            border = self.app.game.countries.es.find(
-                self.app.game.countries.get_eid(
+            border = self.screen.game.countries.es.find(
+                self.screen.game.countries.get_eid(
                     self.country["name"], neighbor["name"]
                 )
             )
             if border["guessed"]:
                 continue
-            self.app.log(f"action_get_hint: checking {neighbor['name']}:")
-            self.app.log(f"action_get_hint: hints: {border['hints']}")
             if border["hints"] >= 3:
                 continue
             else:
@@ -106,14 +144,11 @@ class CountryCard(Vertical):
         Print a neighbor name, either in plain text or obfuscated according to the hint level
         """
         
-        border = self.app.game.countries.es.find(
-            self.app.game.countries.get_eid(
+        border = self.screen.game.countries.es.find(
+            self.screen.game.countries.get_eid(
                 self.country["name"], neighbor["name"]
             )
         )
-        self.app.log(f"label_neighbor: making label for {neighbor['name']}")
-        self.app.log(f"label_neighbor: guessed is {border['guessed']}")
-        self.app.log(f"label_neighbor: hints is {border['hints']}")
         
         if border["guessed"]:
             return f"{neighbor['flag']} {neighbor['name']}"
@@ -121,12 +156,10 @@ class CountryCard(Vertical):
             return f"🇺🇳 ..."
         elif border["hints"] == 1:
             hinted = f"🇺🇳 " + ''.join(' ' if char == ' ' else '-' for char in neighbor["name"])
-            self.app.log(f"Hinted is {hinted}")
             return hinted
         elif border["hints"] == 2:
 
             hinted = f"🇺🇳 " + neighbor["name"][0] + ''.join(' ' if char == ' ' else '-' for char in neighbor["name"][1:])
-            self.app.log(f"Hinted is {hinted}")            
             return hinted
         elif border["hints"] == 3:
             hinted =  (
@@ -135,7 +168,6 @@ class CountryCard(Vertical):
                 ''.join(' ' if char == ' ' else '-' for char in neighbor["name"][1:-1]) +
                  neighbor["name"][-1:]
             )
-            self.app.log(f"Hinted is {hinted}")
             return hinted
         
         
@@ -160,31 +192,81 @@ class CountryCard(Vertical):
         )
 
     def compose(self):
+        self.guessed_neighbors = self.screen.game.countries.guessed_borders(self.country)
+        self.title = self.make_title()
         yield Markdown(self.title)
         country_input = CountryInput()
         yield country_input
         yield AutoComplete(
             country_input,
-            candidates = country_input.selectable_countries
+            candidates = [
+                country["name"] for country in self.screen.game.countries.vs()
+            ]
         )
 
     async def on_input_submitted(self, event: CountryInput.Submitted):
         input = self.query_children(CountryInput).first()
 
         if input.is_valid:
-            self.app.log(f"CountryCard: on_input_submitted: Input was {input.value}")
-            await self.app.game.guess_border(self.country["name"], input.value)
-            self.app.log(f"CountryCard: in_input_submitted: Clearing the input.")
+            log_from_caller(f"Input was {input.value}")
+            await self.screen.game.guess_border(self.country["name"], input.value)
             input.clear()
 
+class CompletedCountryTab(Vertical):
+    """
+    A widget to display completed countries, grouped by region in separate Collapsible widgets.
+    """
 
-class CountryInput(Input):
-    def __init__(self):
-        self.selectable_countries = [
-            country["name"] for country in self.app.game.countries.vs()
+    def compose(self):
+        log_from_caller("I'm composing!")
+
+        regions = {}
+
+        for country in [
+            {"country": country, "region": country["region"]} for country in [
+                country for country in self.screen.game.countries.vs if all(
+                    edge["guessed"] is True for edge in country.incident()
+                )]
+        ]:
+            regions.setdefault(country["region"], []).append(country)
+
+        regions = [
+            {"name": region, "countries": countries}
+            for region, countries in regions.items()
+        ]
+        
+        texts = [
+            ", ".join(
+                f"{country['country']['flag']} {country['country']['name']}" for country in region["countries"]
+            ) for region in regions
         ]
 
+        for text in texts:
+            log_from_caller(text)
+
+        for region in regions:
+            log_from_caller(region["name"])
+
+        collapsibles = []
+        for region, text in zip(regions, texts):
+            collapsibles.append(Collapsible(Markdown(text), title = region["name"]))
+
+        log_from_caller("Generated collapsibles:")
+        for collapsible in collapsibles:
+            log_from_caller(collapsible)
+
+        yield from collapsibles
+    
+class CountryInput(Input):
+
+    def __init__(self):
         super().__init__()
+
+    def on_mount(self):
+        self.selectable_countries = [
+            country["name"] for country in self.screen.game.countries.vs()
+        ]
+
         self.valid_empty = False
         self.validators = [
             Function(
@@ -193,18 +275,16 @@ class CountryInput(Input):
         ]
         self.validate_on = ["submitted"]
 
-class UnnamedGame(App):
-    CSS_PATH = "app.tcss"
+class UnnamedBordersGame(Screen):
 
     class StatusHeader(Header):
 
         def __init__(self):
             super().__init__()
-            self.started_at = time.monotonic()            
-            self.update_sub_title()
         
         def compose(self):
             self.started_at = time.monotonic()
+            self.update_sub_title()
             yield from super().compose()
 
         def on_mount(self) -> None:
@@ -215,12 +295,29 @@ class UnnamedGame(App):
             hours, remainder = divmod(elapsed, 3600)
             minutes, seconds = divmod(remainder, 60)
             self.app.sub_title  = (
-                f"Progress: {self.app.game.done_countries_num}/{self.app.game.total_countries_num} "
-                f"Guesses: {self.app.game.guesses} "
-                f"Mistakes: {self.app.game.mistakes} "
-                f"Hints: {sum(self.app.game.countries.es['hints'])} "
+                f"Progress: {self.screen.game.done_countries_num}/{self.screen.game.total_countries_num} "
+                f"Guesses: {self.screen.game.num_guesses} "
+                f"Mistakes: {self.screen.game.mistakes} "
+                f"Hints: {sum(self.screen.game.countries.es['hints'])} "
                 f"Elapsed: {minutes:02}:{seconds:02}"
         )
+
+    class GameOver(Message):
+        def __init__(self, change):
+            super().__init__()
+            self.change = change
+
+    class GameOverPopup(ModalScreen):
+        def compose(self):
+            with Grid():
+                yield Label("Game over! Well done.")
+                yield Button("Main menu", id = "close")
+
+        def on_button_pressed(self, event: Button.Pressed):
+            if event.button.id == "close":
+                self.app.pop_screen()
+                self.app.pop_screen()
+        
 
     class CountryDone(Message):
         def __init__(self, change):
@@ -252,83 +349,103 @@ class UnnamedGame(App):
             {**country, "include_in_game": True}
             for country in data
             if country["name"] not in excluded_names
+            and "borders" in country
             and (country["name"] in included_names or country["independent"] is True)
         ]
         
         self.game = borders_game(revised_data)
-        self.game.subscribe(self._on_game_changed)
+        self.game.subscribe(self.on_game_changed)
+        log_from_caller("Seed is:", self.game.countries.vs().find(seed = True)["name"])
 
-    def _on_game_changed(self, change):
-        self.app.log(f"UnnamedGame: _on_game_changed: got a {change['kind']}")
+    def on_game_changed(self, change):
+        log_from_caller(f"Got a {change['kind']}")
+        if change["kind"] == "game-over":
+            self.post_message(self.GameOver(change))
+            return
         if change["kind"] == "new-done":
-            self.app.log("UnnamedGame: _on_game_changed: dispatching to self.CountryDone")
             self.post_message(self.CountryDone(change))
+            completed_tab = self.screen.query_one(CompletedCountryTab)
+            log_from_caller(completed_tab)
+            completed_tab.refresh(recompose = True)
+
         if change["kind"] == "new-partial":
-            self.app.log("UnnamedGame: _on_game_changed: dispatching to self.CountryStarted")
             self.post_message(self.CountryStarted(change))
 
-        if change["kind"] in ["success", "failure"]:
-            for card in self.app.query(CountryCard):
-                self.app.log("UnnamedGame: _on_game_changed: dispatching to StatusUpdate")
-                card.post_message(StatusUpdate(change))
-            self.post_message(StatusUpdate(change))
-            
-    async def on_unnamed_game_country_started(self, message):
-        new_country_card = CountryCard(message.change["vertex"])
-        grid = self.app.query_one("#in_progress", Grid)
-        self.app.log("UnnamedGame: on_unnamed_game_country-started: mounting a new CountryCard")
-        await grid.mount(new_country_card)
-        self.app.log("UnnamedGame: on_unnamed_game_country-started: CountryCard finished mounting")
+        if change["kind"] == "success":
+            guess = change["guess"]
+            for card in self.screen.query(CountryCard):
+                if card.country in guess["countries"]:
+                    card.post_message(StatusUpdate(change))
 
-    async def on_unnamed_game_country_done(self, message):
+        if change["kind"] == "failure":
+            self.post_message(StatusUpdate(change))            
+
+    async def on_unnamed_borders_game_game_over(self, message):
+        self.app.push_screen(self.GameOverPopup())
+
+    async def on_unnamed_borders_game_country_started(self, message):
+        new_country_card = CountryCard(message.change["vertex"])
+        grid = self.screen.query_one("#in-progress", Grid)
+        await grid.mount(new_country_card)
+
+    async def on_unnamed_borders_game_country_done(self, message):
         try:
-            done_country_card = self.app.query_one(f"#{message.change['vertex']['alpha3Code']}", CountryCard)
+            done_country_card = self.screen.query_one(f"#{message.change['vertex']['alpha3Code']}", CountryCard)
         except NoMatches:
-            self.app.log("UnnamedGame: on_unnamed_country_done: didn't find a CountryCard, skipping")
+            log_from_caller("Didn't find a CountryCard, skipping.")
             return
 
         change_focus = done_country_card.query_one(CountryInput).has_focus
-        self.app.log(f"UnnamedGame: on_unnamed_game_country_done: change_focus is {change_focus}")
-        self.app.log("UnnamedGame: on_unnamed_game_country_done: removing a CountryCard")
+
         await done_country_card.remove()
-        self.app.log("UnnamedGame: on_unnamed_game_country_done: removed CountryCard")
         first_card = self.query_one(CountryCard)
 
         if change_focus:
-            self.app.log("UnnamedGame: on_unnamed_game_country_done: removed widget was focused")
-            self.app.log("UnnamedGame: on_unnamed_game_country_done: focusing a new input")
+            log_from_caller(f"Removed card was focused prior to removal; changing focus")
             first_card.query_one(Input).focus()
-        else:
-
-            self.app.log("UnnamedGame: on_unnamed_game_country_done: not changing focus")
+            self.screen.query_one("#in-progress-scroll", VerticalScroll).scroll_home()
 
     def make_subtitle(self):
         return (
-            f"Progress: {self.app.game.done_countries_num}/{self.app.game.total_countries_num} "
-            f"Guesses: {self.app.game.guesses} "
-            f"Mistakes: {self.app.game.mistakes} "
-            f"Hints: {sum(self.app.game.countries.es['hints'])}"
+            f"Progress: {self.game.done_countries_num}/{self.game.total_countries_num} "
+            f"Guesses: {self.game.num_guesses} "
+            f"Mistakes: {self.game.mistakes} "
+            f"Hints: {sum(self.game.countries.es['hints'])}"
         )
 
-    def on_mount(self) -> None:
-        self.title = "Unnamed geography game"
-        self.theme = "solarized-dark"
 
     def compose(self):
         yield self.StatusHeader()
         with Middle(), Center(), Vertical():
             with TabbedContent("In progress", "Completed"):
-                with VerticalScroll(can_focus = False), Grid(classes="countrygrid", id="in_progress"):
+                with VerticalScroll(can_focus = False, id = "in-progress-scroll"), Grid(classes="countrygrid", id="in-progress"):
                     yield CountryCard(
-                        self.app.game.countries.vs().find(seed = True)
+                        self.game.countries.vs().find(seed = True)
                     )
-                with VerticalScroll():
-                    yield Grid(classes="countrygrid", id="completed")
-
+                yield CompletedCountryTab()
+                
         yield Footer()
 
+class MainMenu(App):
+    CSS_PATH = "app.tcss"
+    
+    def __init__(self):
+        super().__init__()
+            
+    def compose(self):
+        yield Button("Unnamed Borders Game", id = "unnamed-borders-game")
+
+    def on_button_pressed(self, event: Button.Pressed):
+        if event.button.id == "unnamed-borders-game":
+            unnamed_borders_screen = UnnamedBordersGame()
+            self.app.push_screen(unnamed_borders_screen)
+
+    def on_mount(self) -> None:
+        self.title = "Unnamed geography game"
+        self.theme = "solarized-dark"
+        
 def main():
-    app = UnnamedGame()
+    app = MainMenu()
     app.run()
 
 if __name__ == "__main__":

@@ -60,13 +60,9 @@ GeoNames (CC BY 4.0), distributed by
 [countries.dev](https://countries.dev/). Last collected on September
 28th 2026.
 
-## What's wrong?
-
-- The game will occasionally crash on start with a ValueError: no such vertex
-- The game crashes when no more countries are on screen
-
 ## What's left?
 
-See TODO. 
+See TODO for things I want to do and have remembered to write
+down. Feel free to add suggestions as issues on this repo.
 
 

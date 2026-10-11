@@ -1,6 +1,3 @@
-
-- Implement a "completed" tab, showing completed countries broken down
-  by some variable (region?)
 - Implement a "guesses" tab, showing previous guesses and potentially
   their results (and maybe other metadata: correct/incorrect, hints
   used, time delta since last correct guess, whether the correct guess
@@ -8,7 +5,4 @@
 - In the country-list in each CountryCard, use non-breaking spaces
   within each country name (and the space) between the flag and the
   country name.
-- Improve message posting. Currently, all CountryCards are notified
-  whenever there's some sort of change to the graph, which leads to a
-  lot of unneccessary recomposes.
 

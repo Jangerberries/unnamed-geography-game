@@ -54,12 +54,18 @@ class CountryGraph(igraph.Graph):
         for vertex in self.vs:
             vertex["seed"] = False
 
+
         self.seed_country = self.vs[random.randrange(self.vcount())]
-        #self.seed_country = self.vs(name = "Vatican City")
+        # self.seed_country = self.vs(name = "Vatican City")
+        # self.seed_country = self.vs(name = "Norway")
         self.seed_country["seed"] = True
             
-        self.guesses = 0
+        self.guesses = []
 
+    @property
+    def num_guesses(self):
+        return len(self.guesses)
+ 
     @property
     def partially_guessed_countries(self):
         def matches(v):
@@ -85,17 +91,18 @@ class CountryGraph(igraph.Graph):
         )
 
     def guess_border(self, country_a, country_b):
-        self.guesses += 1
         vertex_a = self.vs.select(name=country_a)
         vertex_b = self.vs.select(name=country_b)
 
         if len(vertex_a) == 1 and len(vertex_b) == 1:
+            guess = [{"countries": [vertex_a[0], vertex_b[0]], "success": True}]
+            self.guesses += guess
             are_neighbors = self.are_adjacent(vertex_a[0], vertex_b[0])            
 
             if are_neighbors:
                 edge = self.es[self.get_eid(vertex_a[0].index, vertex_b[0].index)]
                 edge["guessed"] = True
-                edge["order_guessed"] = self.guesses
+                edge["order_guessed"] = self.num_guesses
                 return True
 
             else:
@@ -130,8 +137,8 @@ class borders_game:
         self._listeners = []
 
     @property
-    def guesses(self):
-        return self.countries.guesses
+    def num_guesses(self):
+        return self.countries.num_guesses
 
     @property
     def total_countries_num(self):
@@ -148,11 +155,16 @@ class borders_game:
         for listener in self._listeners:
             listener(change)
 
+    async def request_game_over(self):
+        # simulate the game being completed
+        await self._notify({"kind": "game-over"})
+
     async def guess_border(self, a, b):
         done_before = self.countries.completely_guessed_countries.indices
         partial_before = self.countries.partially_guessed_countries.indices
 
         result = self.countries.guess_border(a, b)
+        last_guess = self.countries.guesses[-1]
 
         if result is True:
             done_after = self.countries.completely_guessed_countries.indices
@@ -163,6 +175,12 @@ class borders_game:
             new_partial = self.countries.vs(
                 set(partial_after) - set(partial_before)
             )
+            
+            await self._notify({"kind": "success", "guess": last_guess})
+
+            if len(done_after) == len(self.countries.vs()):
+                await self._notify({"kind": "game-over"})
+                return
 
             if len(new_partial) == 1:
                 await self._notify({"kind": "new-partial", "vertex": new_partial[0]})
@@ -179,7 +197,6 @@ class borders_game:
                 await self._notify({"kind": "new-done", "vertex": new_done[1]})
                 
 
-            await self._notify({"kind": "success"})
 
         elif result is False:
             self.mistakes += 1

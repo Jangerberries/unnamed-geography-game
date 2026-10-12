@@ -345,6 +345,13 @@ class UnnamedBordersGame(Screen):
             "Sri Lanka"
         }
 
+        # Misc. data fixes
+        czech_republic = next(item for item in data if item["name"] == "Czech Republic")
+        czech_republic["borders"] = ["DEU", "POL", "AUT", "SVK"]
+
+        singapore = next(item  for item in data if item["name"] == "Singapore")
+        singapore["borders"] = ["MYS"]
+
         revised_data = [
             {**country, "include_in_game": True}
             for country in data

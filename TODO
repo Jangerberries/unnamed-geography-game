@@ -5,4 +5,10 @@
 - In the country-list in each CountryCard, use non-breaking spaces
   within each country name (and the space) between the flag and the
   country name.
-
+- Make a proper main menu for selecting game
+- Make a harder borders game where you have to guess all borders for
+  each country
+- Fix the bug where sometimes finishing two countries will break focus
+- Fix country cards being cut off on the bottom
+- Fix the bug where the completed countries will be higher than the
+  available countries (likely related to fail on startup bug)

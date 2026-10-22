@@ -277,6 +277,14 @@ class CountryInput(Input):
 
 class UnnamedBordersGame(Screen):
 
+    BINDINGS = [
+        Binding("ctrl+e", "quit_game", "Main menu", priority = True),
+    ]
+
+    def action_quit_game(self):
+        self.app.pop_screen()
+
+
     class StatusHeader(Header):
 
         def __init__(self):
@@ -410,6 +418,7 @@ class UnnamedBordersGame(Screen):
         if change_focus:
             log_from_caller(f"Removed card was focused prior to removal; changing focus")
             first_card.query_one(Input).focus()
+            self.screen.query_one("#in-progress-scroll", VerticalScroll).focus()
             self.screen.query_one("#in-progress-scroll", VerticalScroll).scroll_home()
 
     def make_subtitle(self):

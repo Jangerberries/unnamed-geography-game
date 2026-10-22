@@ -54,8 +54,12 @@ class CountryGraph(igraph.Graph):
         for vertex in self.vs:
             vertex["seed"] = False
 
+        # poor definition of connected: those countries reachable with Norway as a start.
+        # Useful for the easier borders game.
+        self.connected_countries = self.subcomponent(self.vs.find(name="Norway"), mode = "all")
+        seed_index = random.choice(self.connected_countries)
 
-        self.seed_country = self.vs[random.randrange(self.vcount())]
+        self.seed_country = self.vs[seed_index] # seed country for the easier borders game
         # self.seed_country = self.vs(name = "Vatican City")
         # self.seed_country = self.vs(name = "Norway")
         self.seed_country["seed"] = True
